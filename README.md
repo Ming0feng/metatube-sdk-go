@@ -4,7 +4,7 @@
 
 > 本仓库是 [metatube-community/metatube-sdk-go](https://github.com/metatube-community/metatube-sdk-go) 的个人维护分支，在上游基础上补充了 JavDB 提供者、番号归一化与无码角标等改动，详见[本地改动](#本地改动)。
 >
-> **这些改动不会出现在上游官方镜像中**，部署时请按下方说明自行构建镜像（`metatube-server:javdb`）。
+> **这些改动不会出现在上游官方镜像中**，部署时请使用下方列出的自有镜像 `ghcr.io/ming0feng/metatube-server`。
 
 [![Go](https://img.shields.io/badge/go-%3E%3D1.25-30dff3?style=flat-square&logo=go)](go.mod)
 [![License](https://img.shields.io/badge/license-Apache--2.0-e4682a?style=flat-square)](LICENSE)
@@ -21,22 +21,25 @@
 
 ### Docker（推荐）
 
-本分支的改动（JavDB 提供者、番号归一化、无码角标）**只存在于自建镜像中**，上游官方镜像不包含这些改动：
+本分支的改动（JavDB 提供者、番号归一化、无码角标）**只存在于下面的自有镜像中**，上游官方镜像不包含这些改动：
 
 | 镜像 | 含本分支改动 | 说明 |
 | --- | --- | --- |
-| `metatube-server:javdb` | 是 | 本地自建，本文示例默认使用 |
+| `ghcr.io/ming0feng/metatube-server:latest` | 是 | 推送 tag 时由 CI 构建，推荐 |
+| `ghcr.io/ming0feng/metatube-server:dev` | 是 | main 分支最新代码，仅 amd64 |
 | `ghcr.io/metatube-community/metatube-server:latest` | 否 | 上游官方版，仅含上游功能 |
 
-#### 先构建镜像
+自有镜像由 GitHub Actions 在推送 tag 时自动构建，同时提供 `linux/amd64` 与 `linux/arm64`，拉取时自动匹配架构。
 
-```bash
-git clone https://github.com/Ming0feng/metatube-sdk-go.git
-cd metatube-sdk-go
-docker build -t metatube-server:javdb .
-```
+> 该 package 目前为**私有**，拉取前需要登录：
+>
+> ```bash
+> echo "<你的 GitHub PAT>" | docker login ghcr.io -u Ming0feng --password-stdin
+> ```
+>
+> PAT 需勾选 `read:packages`。若希望免登录拉取，可在 package 设置中把可见性改为 public。
 
-镜像 tag 可自行替换，后续示例统一写作 `metatube-server:javdb`。
+以下示例统一使用 `ghcr.io/ming0feng/metatube-server:latest`。
 
 #### 最简启动
 
@@ -46,7 +49,7 @@ docker run -d \
   -p 8080:8080 \
   -e TZ=Asia/Shanghai \
   --restart unless-stopped \
-  metatube-server:javdb
+  ghcr.io/ming0feng/metatube-server:latest
 ```
 
 > 不指定 `DSN` 时使用 **SQLite 内存模式**，容器重启后缓存数据（DB 版本、图片哈希等）全部丢失。生产使用请按下节挂载持久化。
@@ -61,7 +64,7 @@ docker run -d \
   -e DSN=/data/metatube.db \
   -v metatube-data:/data \
   --restart unless-stopped \
-  metatube-server:javdb
+  ghcr.io/ming0feng/metatube-server:latest
 ```
 
 SQLite 会自动启用自动迁移，无需额外参数。
@@ -71,7 +74,7 @@ SQLite 会自动启用自动迁移，无需额外参数。
 ```yaml
 services:
   metatube:
-    image: metatube-server:javdb
+    image: ghcr.io/ming0feng/metatube-server:latest
     container_name: metatube
     ports:
       - "8080:8080"
@@ -125,7 +128,7 @@ services:
 
 ```yaml
   metatube:
-    image: metatube-server:javdb
+    image: ghcr.io/ming0feng/metatube-server:latest
 ```
 
 然后启动：
@@ -134,21 +137,21 @@ services:
 docker compose up -d
 ```
 
-#### 推送到自己的镜像仓库（可选）
+#### 本地构建镜像（可选）
 
-便于多机部署时复用构建结果：
+不依赖 CI，也可以直接源码构建：
 
 ```bash
-docker tag metatube-server:javdb ghcr.io/<你的用户名>/metatube-server:latest
-echo "$GHCR_TOKEN" | docker login ghcr.io -u <你的用户名> --password-stdin
-docker push ghcr.io/<你的用户名>/metatube-server:latest
+docker build -t metatube-server:local .
 ```
 
 `Dockerfile` 为两阶段构建：`golang:alpine` 内执行 `make server`，产物复制到 `alpine:latest`，基础镜像已预装 `ca-certificates` 与 `tzdata`。
 
+CI 使用的是 [`Dockerfile.prebuilt`](Dockerfile.prebuilt)：先在原生 amd64 runner 上交叉编译 `amd64`/`arm64` 两个二进制，再打包进镜像，避免 arm64 在 QEMU 下编译（快约 10 倍）。
+
 ### 二进制
 
-从 [Releases](https://github.com/metatube-community/metatube-server-releases/releases) 下载对应平台压缩包：
+从 [Releases](https://github.com/Ming0feng/metatube-sdk-go/releases) 下载对应平台压缩包：
 
 ```bash
 chmod +x metatube-server-linux-amd64
