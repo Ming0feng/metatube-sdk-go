@@ -1,0 +1,30 @@
+# Runtime-only image, used by CI with cross-compiled binaries.
+# Building from source is still supported through ./Dockerfile.
+#
+# Expects build/metatube-server-linux-<arch> to exist in the build context,
+# where <arch> is the value of TARGETARCH (amd64 / arm64).
+FROM alpine:latest
+
+ARG TARGETARCH
+
+LABEL org.opencontainers.image.licenses=Apache-2.0
+LABEL org.opencontainers.image.source="https://github.com/metatube-community/metatube-sdk-go"
+
+RUN apk add --update --no-cache --no-progress ca-certificates tzdata
+
+COPY build/metatube-server-linux-${TARGETARCH} /metatube-server
+RUN chmod +x /metatube-server
+
+ENV GIN_MODE=release
+ENV PORT=8080
+ENV TOKEN=""
+ENV DSN=""
+ENV REQUEST_TIMEOUT=""
+ENV DB_MAX_IDLE_CONNS=0
+ENV DB_MAX_OPEN_CONNS=0
+ENV DB_PREPARED_STMT=0
+ENV DB_AUTO_MIGRATE=0
+
+EXPOSE 8080
+
+ENTRYPOINT ["/metatube-server"]

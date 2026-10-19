@@ -53,12 +53,35 @@ jobs:
         run: |
           echo "version=$(git describe --abbrev=0 --tags HEAD | cut -d'v' -f 2)" >> $GITHUB_OUTPUT
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binaries
+        # Cross-compile on the native amd64 runner. This avoids running the Go
+        # toolchain under QEMU, which is roughly 10x slower for arm64.
+        run: |
+          mkdir -p build
+          MODULE=github.com/metatube-community/metatube-sdk-go
+          VERSION="${{ steps.shell.outputs.version }}"
+          COMMIT=$(git rev-parse --short HEAD)
+          LDFLAGS="-w -s -buildid= -X ${MODULE}/internal/version.Version=${VERSION} -X ${MODULE}/internal/version.GitCommit=${COMMIT}"
+          for arch in amd64 arm64; do
+            echo "building linux/${arch}"
+            CGO_ENABLED=0 GOOS=linux GOARCH="${arch}" \
+              go build -trimpath -ldflags "${LDFLAGS}" \
+              -o "build/metatube-server-linux-${arch}" ./cmd/server
+          done
+          ls -lh build/
+
       - name: Build and Push (dev)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: Dockerfile
+          file: Dockerfile.prebuilt
           push: true
           # amd64 only: arm64 is emulated via QEMU and takes 10x longer,
           # dev builds are for quick iteration.
@@ -73,7 +96,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: Dockerfile
+          file: Dockerfile.prebuilt
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
