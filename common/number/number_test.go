@@ -193,6 +193,19 @@ func TestTrim(t *testing.T) {
 		{"hhd800.com@midv00905hhb1", "midv00905"},
 		{"hhd800.com@1fcdss00072hhb2", "1fcdss00072"},
 		{"hhd800.com@jums00150hhb", "jums00150"},
+		{"MIAB-585-AI", "MIAB-585"},
+		{"MIAB-585-AI.mp4", "MIAB-585"},
+		{"MIAB-585-AI修复", "MIAB-585"},
+		{"MIAB-585-AI修复版 中文字幕", "MIAB-585"},
+		{"hhd800.com@MIAB-585-AI.mp4", "MIAB-585"},
+		{"MIAB-585_AI_4K.mp4", "MIAB-585"},
+		{"savr-937-part1", "savr-937"},
+		{"savr-937-part2", "savr-937"},
+		{"savr-937-part3", "savr-937"},
+		{"SAVR-937-Part1.mp4", "SAVR-937"},
+		{"savr-937_pt2.mkv", "savr-937"},
+		{"savr-937-part1-AI.mp4", "savr-937"},
+		{"SSIS-033-cd4.mp4", "SSIS-033"},
 	} {
 		assert.Equal(t, unit.want, Trim(unit.orig), unit.orig)
 	}

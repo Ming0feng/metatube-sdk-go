@@ -20,8 +20,13 @@ func Trim(s string) string {
 	}
 	s = regexp.MustCompile(`(?i)^(?:f?hd|sd)[-_](.*$)`).
 		ReplaceAllString(s, "${1}") // trim special prefixes
-	s = regexp.MustCompile(`(?i)[-_.](dvd|iso|mkv|mp4|c?avi|\d*fps|whole|(f|hhb)?hd\d*|sd\d*|(?:360|480|720|1080|2160)[pi]|X1080X|uncensored|leak|[2468]ks?|[xh]26[45])+`).
+	s = regexp.MustCompile(`(?i)[-_.](dvd|iso|mkv|mp4|c?avi|\d*fps|whole|(f|hhb)?hd\d*|sd\d*|(?:360|480|720|1080|2160)[pi]|X1080X|uncensored|leak|[2468]ks?|[xh]26[45]|ai|hdr|uhd|hevc|av1|10bit|8bit)+`).
 		ReplaceAllString(s, "") // trim tags
+	// trim split-file markers, e.g. "savr-937-part1" -> "savr-937"
+	s = regexp.MustCompile(`(?i)[-_.\s](?:part|pt|vol|disc|disk|cd)\s?\d+$`).
+		ReplaceAllString(s, "")
+	s = regexp.MustCompile(`(?i)[\s\-_.]*\p{Han}+$`).
+		ReplaceAllString(s, "") // trim trailing chinese tags, e.g. "MIAB-585-AI修复"
 	s = regexp.MustCompile(`(?i)(^|[-_\s]+)(carib(b?ean)?(com)?(pr)?|1?Pond?o?|10mu(sume)?|paco(paco)?(mama)?|mura(mura)?|Tokyo[-_\s]?Hot)([-_\s]+(?P<pattern>\d{4,}[-_]\d{2,}|[a-z]{1,4}\d{2,4})|$)`).
 		ReplaceAllString(s, "${pattern}") // trim makers
 	s = regexp.MustCompile(`^(?i)\s*(FC2[-_]?PPV)[-_]`).

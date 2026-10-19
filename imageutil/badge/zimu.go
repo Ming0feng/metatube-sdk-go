@@ -18,10 +18,14 @@ var u []byte
 //go:embed uc.png
 var uc []byte
 
+//go:embed uncensored.png
+var uncensored []byte
+
 func init() {
 	registerEmbeddedBadge("zimu.png", zimu)
 	registerEmbeddedBadge("u.png", u)
 	registerEmbeddedBadge("uc.png", uc)
+	registerEmbeddedBadge("uncensored.png", uncensored)
 }
 
 func registerEmbeddedBadge(name string, raw []byte) {

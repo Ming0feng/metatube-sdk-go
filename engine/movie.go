@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -77,7 +78,7 @@ func (e *Engine) searchMovie(keyword string, provider mt.MovieProvider, fallback
 }
 
 func (e *Engine) SearchMovie(keyword, name string, fallback bool) ([]*model.MovieSearchResult, error) {
-	if keyword = number.Trim(keyword); keyword == "" {
+	if keyword = normalizeKeyword(keyword); keyword == "" {
 		return nil, mt.ErrInvalidKeyword
 	}
 	provider, err := e.GetMovieProviderByName(name)
@@ -145,9 +146,25 @@ func (e *Engine) searchMovieAll(keyword string) (results []*model.MovieSearchRes
 	return
 }
 
+// normalizeKeyword cleans up a movie keyword before searching. Whitespace is
+// removed first because file names often carry it inside the number, e.g.
+// "MIA B-585" should be searched as "MIAB-585".
+func normalizeKeyword(keyword string) string {
+	return number.Trim(strings.Join(strings.Fields(keyword), ""))
+}
+
+// padNumber pads the trailing numeric segment to 3 digits, which is the
+// canonical JAV numbering convention (e.g. "DSAM-13" -> "DSAM-013").
+func padNumber(s string) string {
+	if ss := regexp.MustCompile(`(?i)^(.*?)(\d+)$`).FindStringSubmatch(s); len(ss) == 3 && len(ss[2]) < 3 {
+		return ss[1] + fmt.Sprintf("%03s", ss[2])
+	}
+	return s
+}
+
 // SearchMovieAll searches the keyword from all providers.
 func (e *Engine) SearchMovieAll(keyword string, fallback bool) (results []*model.MovieSearchResult, err error) {
-	if keyword = number.Trim(keyword); keyword == "" {
+	if keyword = normalizeKeyword(keyword); keyword == "" {
 		return nil, mt.ErrInvalidKeyword
 	}
 
@@ -243,9 +260,66 @@ func (e *Engine) getMovieInfoByProviderID(provider mt.MovieProvider, id string, 
 func (e *Engine) GetMovieInfoByProviderID(pid providerid.ProviderID, lazy bool) (*model.MovieInfo, error) {
 	provider, err := e.GetMovieProviderByName(pid.Provider)
 	if err != nil {
+		// The provider may have been retired (e.g. JAV321). Rather than
+		// failing or serving stale data, discard the cached record and
+		// scrape the movie again from scratch using its number.
+		if info, reErr := e.rescrapeMovieInfoByID(pid); reErr == nil {
+			return info, nil
+		}
 		return nil, err
 	}
 	return e.getMovieInfoByProviderID(provider, pid.ID, lazy)
+}
+
+// rescrapeMovieInfoByID discards the metadata cached under a retired provider
+// and scrapes the movie again by its number. The returned info belongs to
+// whichever provider actually matched, so clients migrate to a new provider id.
+func (e *Engine) rescrapeMovieInfoByID(pid providerid.ProviderID) (*model.MovieInfo, error) {
+	// Drop previous save.
+	if err := e.db.
+		Where("provider = ?", pid.Provider).
+		Where("id = ?", pid.ID).
+		Delete(&model.MovieInfo{}).Error; err != nil {
+		return nil, err
+	}
+
+	keyword := strings.ToUpper(strings.TrimSpace(pid.ID))
+	if keyword == "" {
+		return nil, mt.ErrInvalidID
+	}
+
+	// Retired providers stored numbers without leading zeros (e.g. "dsam-13"),
+	// while the canonical form is zero-padded ("DSAM-013"). Try the padded
+	// form first, otherwise the search may hit another title by collision.
+	var results []*model.MovieSearchResult
+	var searchErr error
+	for _, term := range []string{padNumber(keyword), keyword} {
+		if results, searchErr = e.SearchMovieAll(term, false); searchErr == nil && len(results) > 0 {
+			keyword = term
+			break
+		}
+	}
+	if len(results) == 0 {
+		if searchErr != nil {
+			return nil, searchErr
+		}
+		return nil, mt.ErrInfoNotFound
+	}
+
+	// Prefer an exact number match.
+	best := results[0]
+	for _, result := range results {
+		if strings.EqualFold(result.Number, keyword) {
+			best = result
+			break
+		}
+	}
+
+	provider, err := e.GetMovieProviderByName(best.Provider)
+	if err != nil {
+		return nil, err
+	}
+	return e.getMovieInfoByProviderID(provider, best.ID, false /* always fresh */)
 }
 
 func (e *Engine) getMovieInfoByProviderURL(provider mt.MovieProvider, rawURL string, lazy bool) (*model.MovieInfo, error) {
