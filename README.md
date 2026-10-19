@@ -3,10 +3,11 @@
 元数据刮削服务端，为 [Jellyfin / Emby 的 MetaTube 插件](https://github.com/metatube-community/jellyfin-plugin-metatube) 提供 REST API。
 
 > 本仓库是 [metatube-community/metatube-sdk-go](https://github.com/metatube-community/metatube-sdk-go) 的个人维护分支，在上游基础上补充了 JavDB 提供者、番号归一化与无码角标等改动，详见[本地改动](#本地改动)。
+>
+> **这些改动不会出现在上游官方镜像中**，部署时请按下方说明自行构建镜像（`metatube-server:javdb`）。
 
 [![Go](https://img.shields.io/badge/go-%3E%3D1.25-30dff3?style=flat-square&logo=go)](go.mod)
 [![License](https://img.shields.io/badge/license-Apache--2.0-e4682a?style=flat-square)](LICENSE)
-[![Docker](https://img.shields.io/badge/ghcr.io-metatube--server-2496ED?style=flat-square&logo=docker)](https://github.com/metatube-community/metatube-sdk-go/pkgs/container/metatube-server)
 
 ## 特性
 
@@ -20,7 +21,22 @@
 
 ### Docker（推荐）
 
-镜像：`ghcr.io/metatube-community/metatube-server:latest`
+本分支的改动（JavDB 提供者、番号归一化、无码角标）**只存在于自建镜像中**，上游官方镜像不包含这些改动：
+
+| 镜像 | 含本分支改动 | 说明 |
+| --- | --- | --- |
+| `metatube-server:javdb` | 是 | 本地自建，本文示例默认使用 |
+| `ghcr.io/metatube-community/metatube-server:latest` | 否 | 上游官方版，仅含上游功能 |
+
+#### 先构建镜像
+
+```bash
+git clone https://github.com/Ming0feng/metatube-sdk-go.git
+cd metatube-sdk-go
+docker build -t metatube-server:javdb .
+```
+
+镜像 tag 可自行替换，后续示例统一写作 `metatube-server:javdb`。
 
 #### 最简启动
 
@@ -30,7 +46,7 @@ docker run -d \
   -p 8080:8080 \
   -e TZ=Asia/Shanghai \
   --restart unless-stopped \
-  ghcr.io/metatube-community/metatube-server:latest
+  metatube-server:javdb
 ```
 
 > 不指定 `DSN` 时使用 **SQLite 内存模式**，容器重启后缓存数据（DB 版本、图片哈希等）全部丢失。生产使用请按下节挂载持久化。
@@ -45,7 +61,7 @@ docker run -d \
   -e DSN=/data/metatube.db \
   -v metatube-data:/data \
   --restart unless-stopped \
-  ghcr.io/metatube-community/metatube-server:latest
+  metatube-server:javdb
 ```
 
 SQLite 会自动启用自动迁移，无需额外参数。
@@ -55,7 +71,7 @@ SQLite 会自动启用自动迁移，无需额外参数。
 ```yaml
 services:
   metatube:
-    image: ghcr.io/metatube-community/metatube-server:latest
+    image: metatube-server:javdb
     container_name: metatube
     ports:
       - "8080:8080"
@@ -105,19 +121,30 @@ services:
 
 #### docker compose 一键启动
 
-仓库自带 [`docker-compose.yaml`](docker-compose.yaml)，采用 PostgreSQL + Unix Socket 方案：
+仓库自带的 [`docker-compose.yaml`](docker-compose.yaml) 采用 PostgreSQL + Unix Socket 方案，但其中 `image` 仍指向上游官方镜像。要使用本分支功能，先把它改成自建 tag：
+
+```yaml
+  metatube:
+    image: metatube-server:javdb
+```
+
+然后启动：
 
 ```bash
 docker compose up -d
 ```
 
-#### 构建自己的镜像
+#### 推送到自己的镜像仓库（可选）
+
+便于多机部署时复用构建结果：
 
 ```bash
-docker build -t metatube-server:local .
+docker tag metatube-server:javdb ghcr.io/<你的用户名>/metatube-server:latest
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <你的用户名> --password-stdin
+docker push ghcr.io/<你的用户名>/metatube-server:latest
 ```
 
-`Dockerfile` 为两阶段构建：`golang:alpine` 内执行 `make server`，产物复制到 `alpine:latest`。
+`Dockerfile` 为两阶段构建：`golang:alpine` 内执行 `make server`，产物复制到 `alpine:latest`，基础镜像已预装 `ca-certificates` 与 `tzdata`。
 
 ### 二进制
 
