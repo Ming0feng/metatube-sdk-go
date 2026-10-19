@@ -54,13 +54,15 @@ jobs:
           echo "version=$(git describe --abbrev=0 --tags HEAD | cut -d'v' -f 2)" >> $GITHUB_OUTPUT
 
       - name: Build and Push (dev)
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          # amd64 only: arm64 is emulated via QEMU and takes 10x longer,
+          # dev builds are for quick iteration.
+          platforms: linux/amd64
           tags: |
             ${{ steps.image.outputs.name }}:dev
           cache-from: type=gha
