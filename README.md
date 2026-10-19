@@ -262,6 +262,24 @@ curl "http://127.0.0.1:8080/v1/translate?q=hello&from=auto&to=zh-CN&engine=Googl
 - **服务器地址**：`http://<host>:<port>/`
 - **访问令牌**：与服务端 `TOKEN` 一致，未设置则留空
 
+## 联动项目
+
+本服务是 MetaTube 链路的服务端，Jellyfin / Emby 侧由两个插件消费：
+
+| 项目 | 角色 | 地址 |
+| --- | --- | --- |
+| metatube-sdk-go | 本仓库：刮削服务端（REST API、图片处理、翻译） | https://github.com/Ming0feng/metatube-sdk-go |
+| jellyfin-plugin-metatube | Jellyfin / Emby 元数据插件，调用本服务并写入 `MetaTube` ProviderId | https://github.com/Ming0feng/jellyfin-plugin-metatube |
+| emby-subtitlecat | Emby 字幕插件，依赖 `MetaTube` ProviderId 定位番号，并复用本服务的图片角标接口 | https://github.com/Ming0feng/emby-subtitlecat |
+
+数据流：
+
+1. 刮削插件调用 `/v1/movies/search`（`fallback=true` 时附带本地库缓存）与 `/v1/movies/{provider}/{id}` 取元数据，成功后将 `<Provider>:<Id>[:<Position>[:<Update>]]` 写入条目的 `ProviderIds["MetaTube"]`。
+2. 图片不落盘：`/v1/images/primary|thumb|backdrop/{provider}/{id}` 按 `ratio`、`pos`、`badge`、`quality` 参数实时生成。
+3. 字幕插件只处理带 `MetaTube` ProviderId 的条目，并复用同一实例的图片接口补「中文字幕」角标；其服务器地址来自刮削插件生成的 `MetaTube.json`。
+
+因此三个项目应指向同一个实例，且刮削插件的 `服务器地址` 与字幕插件读到的 `Server` 保持一致。
+
 ## 本地改动
 
 | 改动 | 说明 |
