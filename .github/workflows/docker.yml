@@ -16,6 +16,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
 
       - name: Check out code into the Go module directory
@@ -54,7 +57,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/metatube-community/metatube-server:dev
+            ghcr.io/${{ github.repository_owner }}/metatube-server:dev
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -67,7 +70,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/metatube-community/metatube-server:latest
-            ghcr.io/metatube-community/metatube-server:${{ steps.shell.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/metatube-server:latest
+            ghcr.io/${{ github.repository_owner }}/metatube-server:${{ steps.shell.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
