@@ -1,7 +1,10 @@
 package engine
 
 import (
+	"bytes"
 	"image"
+	"io"
+	"net/http"
 
 	"github.com/metatube-community/metatube-sdk-go/common/number"
 	R "github.com/metatube-community/metatube-sdk-go/constant"
@@ -75,6 +78,12 @@ func (e *Engine) GetMovieBackdropImage(pid providerid.ProviderID) (image.Image, 
 	)
 }
 
+// ClearImageCache 清空本地原图缓存，返回删除的文件数。
+// 缓存未启用时安全返回 (0, nil)。
+func (e *Engine) ClearImageCache() (int, error) {
+	return e.imageCache.Clear()
+}
+
 func (e *Engine) GetImageByURL(provider mt.Provider, url string, ratio, pos float64, auto bool) (img image.Image, err error) {
 	if img, err = e.getImageByURL(provider, url); err != nil {
 		return
@@ -91,13 +100,34 @@ func (e *Engine) GetImageByURL(provider mt.Provider, url string, ratio, pos floa
 }
 
 func (e *Engine) getImageByURL(provider mt.Provider, url string) (img image.Image, err error) {
+	// 先看本地缓存：命中就完全不碰网络。
+	// 这是"代理挂了也能出图"的关键 —— 原图已经在磁盘上，
+	// 叠角标、裁剪都是纯本地计算。
+	if data, ok := e.imageCache.Get(url); ok {
+		if img, _, decodeErr := imageutil.Decode(bytes.NewReader(data)); decodeErr == nil {
+			return img, nil
+		}
+		// 缓存文件坏了（半截、格式变了）：当作未命中，继续走网络
+	}
+
 	resp, err := e.Fetch(url, provider)
 	if err != nil {
 		return
 	}
 	defer resp.Body.Close()
-	img, _, err = imageutil.Decode(resp.Body)
-	return
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if img, _, err = imageutil.Decode(bytes.NewReader(data)); err != nil {
+		return nil, err
+	}
+	// 只缓存正常响应，避免把错误页当图片存下来
+	if resp.StatusCode == http.StatusOK {
+		e.imageCache.Put(url, data)
+	}
+	return img, nil
 }
 
 func (e *Engine) getPreferredMovieImageURLAndInfo(pid providerid.ProviderID, thumb bool) (url string, info *model.MovieInfo, err error) {

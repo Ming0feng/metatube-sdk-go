@@ -77,6 +77,12 @@ func New(app *engine.Engine, v auth.Validator) *gin.Engine {
 		{
 			reviews.GET("/:provider/:id", getReview(app))
 		}
+
+		images := private.Group("/images")
+		{
+			// 清空本地原图缓存（元数据整理后调用一次）。
+			images.DELETE("/cache", cacheNoStore(), clearImageCache(app))
+		}
 	}
 
 	return r

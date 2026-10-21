@@ -4,11 +4,14 @@ import (
 	goflag "flag"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/peterbourgon/ff/v3"
 
+	"github.com/metatube-community/metatube-sdk-go/common/imagecache"
 	"github.com/metatube-community/metatube-sdk-go/database"
 	"github.com/metatube-community/metatube-sdk-go/engine"
 	"github.com/metatube-community/metatube-sdk-go/internal/envconfig"
@@ -25,6 +28,10 @@ var Config = &struct {
 
 	// engine config
 	RequestTimeout time.Duration
+
+	// image cache config
+	ImageCacheDir  string
+	ImageCacheSize int64
 
 	// database config
 	DBMaxIdleConns int
@@ -49,6 +56,10 @@ func init() {
 	flag.StringVar(&Config.Token, "token", "", "Token to access server")
 	flag.StringVar(&Config.DSN, "dsn", "", "Database Service Name")
 	flag.DurationVar(&Config.RequestTimeout, "request-timeout", engine.DefaultRequestTimeout, "Timeout per request")
+	flag.StringVar(&Config.ImageCacheDir, "image-cache-dir", "",
+		"Directory to cache downloaded images (default: <dsn dir>/image-cache)")
+	flag.Int64Var(&Config.ImageCacheSize, "image-cache-size", 1024,
+		"Image cache size limit in MB")
 	flag.IntVar(&Config.DBMaxIdleConns, "db-max-idle-conns", 0, "Database max idle connections")
 	flag.IntVar(&Config.DBMaxOpenConns, "db-max-open-conns", 0, "Database max open connections")
 	flag.BoolVar(&Config.DBAutoMigrate, "db-auto-migrate", false, "Database auto migration")
@@ -75,6 +86,13 @@ func Router(names ...string) *gin.Engine {
 	// timeout must >= 1 second
 	if Config.RequestTimeout >= time.Second {
 		opts = append(opts, engine.WithRequestTimeout(Config.RequestTimeout))
+	}
+
+	// 图片缓存：下载过的原图留在本地，之后叠角标/裁剪都在本地完成，
+	// 不再依赖 javdb / javbus 与代理是否可达。
+	if cache := openImageCache(); cache != nil {
+		opts = append(opts, engine.WithImageCache(cache))
+		log.Printf("[INFO] 图片缓存已启用：%s（上限 %d MB）", cache.Dir(), Config.ImageCacheSize)
 	}
 
 	// specify engine name
@@ -108,4 +126,33 @@ func Router(names ...string) *gin.Engine {
 	}
 
 	return route.New(app, token)
+}
+
+// openImageCache 解析缓存目录并打开缓存。
+//
+// 目录优先级：显式配置 --image-cache-dir / IMAGE_CACHE_DIR
+// → 数据库同目录（容器里就是 /data/image-cache，随数据卷一起持久化）
+// → 系统缓存目录（本地 go run 时用）。
+//
+// 打不开就返回 nil（禁用）并打一条警告 —— 缓存只是优化，
+// 不能因为它拦住服务启动。
+func openImageCache() *imagecache.Cache {
+	dir := Config.ImageCacheDir
+	if dir == "" && Config.DSN != "" && !strings.Contains(Config.DSN, ":memory:") {
+		if base := filepath.Dir(Config.DSN); base != "" && base != "." {
+			dir = filepath.Join(base, "image-cache")
+		}
+	}
+	if dir == "" {
+		if userCache, err := os.UserCacheDir(); err == nil {
+			dir = filepath.Join(userCache, "metatube", "image-cache")
+		}
+	}
+
+	cache, err := imagecache.Open(dir, Config.ImageCacheSize<<20)
+	if err != nil {
+		log.Printf("[WARN] 图片缓存不可用，已禁用：%v", err)
+		return nil
+	}
+	return cache
 }

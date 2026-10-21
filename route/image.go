@@ -141,4 +141,19 @@ func getImage(app *engine.Engine, typ imageType) gin.HandlerFunc {
 	}
 }
 
+// clearImageCache 清空服务端本地原图缓存。
+// 由客户端在元数据整理完成后调用：原图已经落到媒体目录，服务端这份不再需要。
+func clearImageCache(app *engine.Engine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		removed, err := app.ClearImageCache()
+		if err != nil {
+			abortWithError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, &responseMessage{
+			Data: gin.H{"removed": removed},
+		})
+	}
+}
+
 const jpegImageMIMEType = "image/jpeg"

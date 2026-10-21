@@ -13,6 +13,7 @@ import (
 
 	"github.com/metatube-community/metatube-sdk-go/collection/maps"
 	"github.com/metatube-community/metatube-sdk-go/common/fetch"
+	"github.com/metatube-community/metatube-sdk-go/common/imagecache"
 	"github.com/metatube-community/metatube-sdk-go/database"
 	mt "github.com/metatube-community/metatube-sdk-go/provider"
 )
@@ -42,6 +43,10 @@ type Engine struct {
 	// E.g., github.com -> [Gfriends, ...]
 	actorHostProviders *maps.CaseInsensitiveMap[[]mt.ActorProvider]
 	movieHostProviders *maps.CaseInsensitiveMap[[]mt.MovieProvider]
+	// imageCache stores raw downloaded image bytes, so that badges
+	// can be composited locally without hitting the provider again.
+	// Nil means the cache is disabled.
+	imageCache *imagecache.Cache
 }
 
 func New(db *gorm.DB, opts ...Option) *Engine {
