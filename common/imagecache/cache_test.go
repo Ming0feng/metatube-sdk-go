@@ -57,7 +57,7 @@ func TestDisabledCacheIsSafe(t *testing.T) {
 
 func TestSameURLMapsToSameKey(t *testing.T) {
 	url := "https://c0.jdbstatic.com/covers/aq/AqMvn0.jpg"
-	if Key(url) != Key(url) {
+	if first, second := Key(url), Key(url); first != second {
 		t.Fatal("同一个 URL 的 key 必须稳定")
 	}
 	if Key(url) == Key(url+"?v=2") {
