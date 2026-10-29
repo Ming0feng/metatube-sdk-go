@@ -6,6 +6,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gocolly/colly/v2"
@@ -20,6 +21,8 @@ import (
 var (
 	_ provider.MovieProvider = (*JavDB)(nil)
 	_ provider.MovieSearcher = (*JavDB)(nil)
+	_ provider.ConfigSetter  = (*JavDB)(nil)
+	_ provider.CookieSetter  = (*JavDB)(nil)
 )
 
 const (
@@ -38,10 +41,45 @@ var trailingDigits = regexp.MustCompile(`(?i)^(.*?)(\d+)$`)
 
 type JavDB struct {
 	*scraper.Scraper
+	mu     sync.Mutex
+	cookie string
 }
 
 func New() *JavDB {
-	return &JavDB{scraper.NewDefaultScraper(Name, baseURL, Priority, language.Chinese)}
+	return &JavDB{Scraper: scraper.NewDefaultScraper(Name, baseURL, Priority, language.Chinese)}
+}
+
+// SetConfig applies additional configs (e.g. the anti-bot cookie) to JavDB.
+// The cookie is read from the "cookie" key, set via the backend environment
+// variable MT_MOVIE_PROVIDER_JAVDB__COOKIE.
+func (jav *JavDB) SetConfig(config provider.Config) error {
+	if v, err := config.GetString("cookie"); err == nil {
+		jav.SetCookie(v)
+	}
+	return nil
+}
+
+// SetCookie sets the Cookie header value used when scraping javdb.com. It is
+// safe for concurrent use: the server may override the environment-configured
+// cookie on a per-request basis.
+func (jav *JavDB) SetCookie(cookie string) {
+	jav.mu.Lock()
+	jav.cookie = strings.TrimSpace(cookie)
+	jav.mu.Unlock()
+}
+
+// collector returns a cloned collector with the configured cookie attached.
+func (jav *JavDB) collector() *colly.Collector {
+	c := jav.Scraper.ClonedCollector()
+	jav.mu.Lock()
+	cookie := jav.cookie
+	jav.mu.Unlock()
+	if cookie != "" {
+		c.OnRequest(func(r *colly.Request) {
+			r.Headers.Set("Cookie", cookie)
+		})
+	}
+	return c
 }
 
 func (jav *JavDB) SetRequestTimeout(_ time.Duration) {
@@ -85,7 +123,7 @@ func (jav *JavDB) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 		Genres:        []string{},
 	}
 
-	c := jav.ClonedCollector()
+	c := jav.collector()
 
 	// Title (number prefix is stripped by the site itself)
 	c.OnXML(`//h2[@class="title is-4"]/strong[@class="current-title"]`, func(e *colly.XMLElement) {
@@ -215,7 +253,7 @@ func searchTerms(keyword string) []string {
 }
 
 func (jav *JavDB) searchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
-	c := jav.ClonedCollector()
+	c := jav.collector()
 
 	type candidate struct {
 		result *model.MovieSearchResult

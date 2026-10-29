@@ -98,8 +98,14 @@ func (e *Engine) searchMovieAll(keyword string) (results []*model.MovieSearchRes
 	}
 	respCh := make(chan response)
 
+	// 类型路由：只请求与该番号类型匹配的 provider，减少无效请求。
+	allowed := allowedProviderNames(keyword)
+
 	var wg sync.WaitGroup
-	for _, provider := range e.movieProviders.Iterator() {
+	for name, provider := range e.movieProviders.Iterator() {
+		if _, ok := allowed[name]; !ok {
+			continue
+		}
 		wg.Add(1)
 		// Goroutine started time.
 		startTime := time.Now()

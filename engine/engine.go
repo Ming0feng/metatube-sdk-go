@@ -153,6 +153,22 @@ func (e *Engine) MustGetMovieProviderByName(name string) mt.MovieProvider {
 	return provider
 }
 
+// SetMovieProviderCookie applies a runtime cookie override to the named movie
+// provider, if it supports cookies (e.g. JavDB). An empty cookie is ignored so
+// the environment-configured default is preserved.
+func (e *Engine) SetMovieProviderCookie(name, cookie string) {
+	if cookie == "" {
+		return
+	}
+	provider, err := e.GetMovieProviderByName(name)
+	if err != nil {
+		return
+	}
+	if setter, ok := provider.(mt.CookieSetter); ok {
+		setter.SetCookie(cookie)
+	}
+}
+
 // Fetch fetches content from url. If the provider
 // is nil, the default fetcher will be used.
 func (e *Engine) Fetch(url string, provider mt.Provider) (*http.Response, error) {

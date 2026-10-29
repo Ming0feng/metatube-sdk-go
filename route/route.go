@@ -30,6 +30,9 @@ func New(app *engine.Engine, v auth.Validator) *gin.Engine {
 	// redirection middleware
 	r.Use(redirect(app))
 
+	// per-request JavDB cookie override (from the plugin config).
+	r.Use(javdbCookie(app))
+
 	// index page
 	r.GET("/", getIndex(app))
 
@@ -37,6 +40,7 @@ func New(app *engine.Engine, v auth.Validator) *gin.Engine {
 	{
 		system.GET("/modules", getModules())
 		system.GET("/providers", getProviders(app))
+		system.GET("/connectivity", getConnectivity(app))
 	}
 
 	public := r.Group("/v1",
@@ -86,6 +90,20 @@ func New(app *engine.Engine, v auth.Validator) *gin.Engine {
 	}
 
 	return r
+}
+
+// javdbProviderName is the provider the per-request cookie override targets.
+const javdbProviderName = "JavDB"
+
+// javdbCookie applies a per-request JavDB cookie sent by the Jellyfin/Emby
+// plugin (header X-JavDB-Cookie) to the JavDB provider.
+func javdbCookie(app *engine.Engine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if cookie := c.GetHeader("X-JavDB-Cookie"); cookie != "" {
+			app.SetMovieProviderCookie(javdbProviderName, cookie)
+		}
+		c.Next()
+	}
 }
 
 func logger() gin.HandlerFunc {

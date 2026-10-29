@@ -97,6 +97,11 @@ type ProxySetter interface {
 	SetProxy(proxyURL string) error
 }
 
+type CookieSetter interface {
+	// SetCookie sets the Cookie header value for HTTP requests.
+	SetCookie(cookie string)
+}
+
 type Config interface {
 	Has(string) bool
 	GetString(string) (string, error)
