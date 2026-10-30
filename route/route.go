@@ -73,6 +73,7 @@ func New(app *engine.Engine, v auth.Validator) *gin.Engine {
 
 		movies := private.Group("/movies")
 		{
+			movies.GET("/aggregate", getAggregateMovie(app))
 			movies.GET("/:provider/:id", getInfo(app, movieInfoType))
 			movies.GET("/search", getSearch(app, movieSearchType))
 		}

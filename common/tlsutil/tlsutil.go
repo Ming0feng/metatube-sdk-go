@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -146,40 +147,51 @@ func (t *Transport) roundTripOnce(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
 
 	clone := req.Clone(ctx)
 	clone.Close = true // force Connection: close since we never reuse the conn
 
-	// 明文 HTTP 请求直接读写，不做 TLS 握手（如 getchu 等站点仍用 http）。
-	if req.URL.Scheme != "https" {
-		if err := clone.Write(conn); err != nil {
+	var rw io.ReadWriter
+	if req.URL.Scheme == "https" {
+		uconn := utls.UClient(conn, &utls.Config{
+			ServerName:         req.URL.Hostname(),
+			InsecureSkipVerify: true, //nolint:gosec // mirror curl_cffi verify=False
+		}, t.currentFingerprint(req.URL.Hostname()))
+		if err := uconn.BuildHandshakeState(); err != nil {
+			conn.Close()
 			return nil, err
 		}
-		return http.ReadResponse(bufio.NewReader(conn), clone)
-	}
-
-	uconn := utls.UClient(conn, &utls.Config{
-		ServerName:         req.URL.Hostname(),
-		InsecureSkipVerify: true, //nolint:gosec // mirror curl_cffi verify=False
-	}, t.currentFingerprint(req.URL.Hostname()))
-	if err := uconn.BuildHandshakeState(); err != nil {
-		return nil, err
-	}
-	// The browser profiles advertise h2; we only speak HTTP/1.1, so force it.
-	for _, ext := range uconn.Extensions {
-		if alpn, ok := ext.(*utls.ALPNExtension); ok {
-			alpn.AlpnProtocols = []string{"http/1.1"}
+		// The browser profiles advertise h2; we only speak HTTP/1.1, so force it.
+		for _, ext := range uconn.Extensions {
+			if alpn, ok := ext.(*utls.ALPNExtension); ok {
+				alpn.AlpnProtocols = []string{"http/1.1"}
+			}
 		}
+		if err := uconn.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		rw = uconn
+	} else {
+		// 明文 HTTP 请求直接读写，不做 TLS 握手（如 getchu 等站点仍用 http）。
+		rw = conn
 	}
-	if err := uconn.HandshakeContext(ctx); err != nil {
+
+	if err := clone.Write(rw); err != nil {
+		conn.Close()
 		return nil, err
 	}
 
-	if err := clone.Write(uconn); err != nil {
+	resp, err := http.ReadResponse(bufio.NewReader(rw), clone)
+	if err != nil {
+		conn.Close()
 		return nil, err
 	}
-	return http.ReadResponse(bufio.NewReader(uconn), clone)
+
+	// 连接生命周期跟随响应体：body 读尽或 Close 时才关闭底层连接，
+	// 否则调用方读取 body 时会遇到 "use of closed network connection"。
+	resp.Body = &autoCloseBody{ReadCloser: resp.Body, conn: conn}
+	return resp, nil
 }
 
 func (t *Transport) dial(ctx context.Context, req *http.Request) (net.Conn, error) {
@@ -252,3 +264,33 @@ type bufferedConn struct {
 }
 
 func (c *bufferedConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+
+// autoCloseBody 在响应体读尽（EOF/出错）或显式 Close 时关闭底层连接。
+// Transport 不复用连接，连接生命周期必须跟随响应体，否则调用方在读取
+// body 时底层连接已被提前关闭，触发 "use of closed network connection"。
+type autoCloseBody struct {
+	io.ReadCloser
+	conn   net.Conn
+	closed bool
+}
+
+func (b *autoCloseBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil {
+		b.closeConn()
+	}
+	return n, err
+}
+
+func (b *autoCloseBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.closeConn()
+	return err
+}
+
+func (b *autoCloseBody) closeConn() {
+	if !b.closed {
+		b.closed = true
+		b.conn.Close()
+	}
+}

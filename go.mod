@@ -24,6 +24,7 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.12.3
+	github.com/longbridgeapp/opencc v0.3.13
 	github.com/machinebox/graphql v0.2.2
 	github.com/nlnwa/whatwg-url v0.6.2
 	github.com/ory/dockertest v3.3.5+incompatible
@@ -93,6 +94,8 @@ require (
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
+	github.com/liuzl/cedar-go v0.0.0-20170805034717-80a9c64b256d // indirect
+	github.com/liuzl/da v0.0.0-20180704015230-14771aad5b1d // indirect
 	github.com/matryer/is v1.4.1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect

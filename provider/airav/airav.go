@@ -6,7 +6,6 @@ package airav
 import (
 	"fmt"
 	"net/url"
-	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -31,8 +30,9 @@ const (
 )
 
 const (
-	baseURL   = "https://airav.io"
-	searchURL = "https://airav.io/search_result?kw=%s"
+	// 默认 zh-TW 为繁体，这里统一走 /cn 简体版，避免插件拿到繁体标题/剧情。
+	baseURL   = "https://airav.io/cn"
+	searchURL = "https://airav.io/cn/search_result?kw=%s"
 )
 
 // fc2Number 匹配折叠后的 FC2 番号（fc2-<id> / fc2ppv<id>），提取商品 ID。
@@ -60,7 +60,8 @@ func (av *Airav) ParseMovieIDFromURL(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if id := path.Base(homepage.Path); id != "" && id != "/" && id != "." {
+	// 详情页 URL 形如 /video?hid=<id>，ID 即 hid 参数。
+	if id := homepage.Query().Get("hid"); id != "" {
 		return id, nil
 	}
 	return "", provider.ErrInvalidURL
@@ -92,8 +93,8 @@ func (av *Airav) getMovieInfo(rawURL string) (info *model.MovieInfo, err error) 
 
 	c := av.ClonedCollector()
 
-	// 番号（信息表「番号」栏）。
-	c.OnXML(`//li[contains(., "番号")]/span`, func(e *colly.XMLElement) {
+	// 番号（信息表「番号」栏，站点为繁体「番號」）。
+	c.OnXML(`//li[contains(., "番号") or contains(., "番號")]/span`, func(e *colly.XMLElement) {
 		if number := strings.TrimSpace(e.Text); number != "" && info.Number == "" {
 			info.Number = number
 			info.ID = number
@@ -207,10 +208,9 @@ func (av *Airav) searchMovie(keyword string) (results []*model.MovieSearchResult
 		}
 
 		homepage := e.Request.AbsoluteURL(href)
-		id, _ := av.ParseMovieIDFromURL(homepage)
 
 		results = append(results, &model.MovieSearchResult{
-			ID:       id,
+			ID:       keyword,
 			Number:   keyword,
 			Title:    title,
 			Provider: av.Name(),

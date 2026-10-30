@@ -33,7 +33,7 @@ const (
 const (
 	baseURL   = "https://iqq5.xyz/"
 	searchURL = "https://iqq5.xyz/cn/search.php?kw=%s"
-	movieURL  = "https://iqq5.xyz/cn/%s"
+	movieURL  = "https://iqq5.xyz/cn/player.php?uuid=%s"
 )
 
 // excludedKeywords 排除马赛克破坏版等无有效元数据的条目。
@@ -63,10 +63,9 @@ func (iq *Iqqtv) ParseMovieIDFromURL(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// URL 形如 /cn/{slug}，最后一段即番号/slug。
-	segments := strings.Split(strings.Trim(homepage.Path, "/"), "/")
-	if len(segments) > 0 && segments[len(segments)-1] != "" {
-		return segments[len(segments)-1], nil
+	// 详情页 URL 形如 /cn/player.php?uuid=<id>，ID 即 uuid 参数。
+	if id := homepage.Query().Get("uuid"); id != "" {
+		return id, nil
 	}
 	return "", provider.ErrInvalidURL
 }
@@ -196,12 +195,8 @@ func (iq *Iqqtv) SearchMovie(keyword string) (results []*model.MovieSearchResult
 		}
 
 		// 统一走 /cn 语言前缀。
-		detailPath := langPrefix.ReplaceAllString(href, "")
-		detailPath = strings.Trim(detailPath, "/")
-		if detailPath == "" {
-			return
-		}
-		homepage := fmt.Sprintf(movieURL, detailPath)
+		href = langPrefix.ReplaceAllString(href, "/cn/")
+		homepage := e.Request.AbsoluteURL(href)
 		id, _ := iq.ParseMovieIDFromURL(homepage)
 
 		results = append(results, &model.MovieSearchResult{

@@ -251,7 +251,13 @@ func (e *Engine) getMovieInfoWithCallback(provider mt.MovieProvider, id string, 
 			}).Create(info) // ignore error
 		}
 	}()
-	return callback()
+
+	info, err = callback()
+	if err == nil && info != nil {
+		// 中文源统一做繁体→简体转换。
+		simplifyMovieInfo(provider, info)
+	}
+	return info, err
 }
 
 func (e *Engine) getMovieInfoByProviderID(provider mt.MovieProvider, id string, lazy bool) (*model.MovieInfo, error) {
