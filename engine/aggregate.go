@@ -2,6 +2,7 @@ package engine
 
 import (
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -37,6 +38,10 @@ var aggregateFields = []string{
 	"Score", "Runtime", "ReleaseDate",
 }
 
+// movieCacheMaxAge 是聚合走 DB 缓存的窗口：该番号的最新详情若在窗口内，
+// 就直接复用缓存聚合，跳过全源网络搜索，从而加速重复刮削。
+const movieCacheMaxAge = 7 * 24 * time.Hour
+
 // AggregateMovie searches the keyword across all providers and merges the
 // results field-by-field instead of taking the first hit whole. The identity
 // (ID/Number/Provider/Homepage) comes from the best-matching provider while
@@ -46,6 +51,18 @@ var aggregateFields = []string{
 // fieldPriority may be nil; then the provider search priority is used for every
 // field.
 func (e *Engine) AggregateMovie(keyword string, fieldPriority FieldPriority) (*model.MovieInfo, error) {
+	if keyword = normalizeKeyword(keyword); keyword == "" {
+		return nil, mt.ErrInvalidKeyword
+	}
+
+	// DB 缓存优先：该番号已有新鲜详情时直接聚合，跳过全源网络搜索。
+	if infos, err := e.getCachedMovieInfos(keyword, movieCacheMaxAge); err == nil && len(infos) > 0 {
+		if ordered := e.sortMovieInfosByPriority(infos); len(ordered) > 0 {
+			e.logger.Printf("Aggregate movie %s from cache: %d providers", keyword, len(ordered))
+			return mergeMovieInfos(ordered, fieldPriority), nil
+		}
+	}
+
 	results, err := e.SearchMovieAll(keyword, true)
 	if err != nil {
 		return nil, err
@@ -101,6 +118,41 @@ func (e *Engine) AggregateMovie(keyword string, fieldPriority FieldPriority) (*m
 	}
 
 	return mergeMovieInfos(ordered, fieldPriority), nil
+}
+
+// getCachedMovieInfos 从 DB 读取某番号在缓存窗口内的完整详情（按 number 或 id
+// 精确匹配），供聚合复用缓存、跳过全源网络搜索。
+func (e *Engine) getCachedMovieInfos(keyword string, maxAge time.Duration) ([]*model.MovieInfo, error) {
+	var infos []*model.MovieInfo
+	numberOrID := e.db.
+		Where("number = ? COLLATE NOCASE", keyword).
+		Or("id = ? COLLATE NOCASE", keyword)
+	err := e.db.
+		Where(numberOrID).
+		Where("updated_at > ?", time.Now().Add(-maxAge)).
+		Find(&infos).Error
+	return infos, err
+}
+
+// sortMovieInfosByPriority 过滤无效详情及已下线 provider，并按 provider 优先级
+// 降序排序（身份字段取排序后第一个）。
+func (e *Engine) sortMovieInfosByPriority(infos []*model.MovieInfo) []*model.MovieInfo {
+	ordered := make([]*model.MovieInfo, 0, len(infos))
+	for _, info := range infos {
+		if info == nil || !info.IsValid() {
+			continue
+		}
+		if _, err := e.GetMovieProviderByName(info.Provider); err != nil {
+			continue // provider 已下线，跳过
+		}
+		ordered = append(ordered, info)
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		pi, _ := e.GetMovieProviderByName(ordered[i].Provider)
+		pj, _ := e.GetMovieProviderByName(ordered[j].Provider)
+		return pi.Priority() > pj.Priority()
+	})
+	return ordered
 }
 
 // mergeMovieInfos merges ordered infos field-by-field. ordered is expected to
