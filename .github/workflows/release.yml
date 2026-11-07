@@ -45,5 +45,5 @@ jobs:
           files: build/*
           draft: false
           prerelease: false
-          repository: metatube-community/metatube-server-releases
+          repository: ${{ github.repository_owner }}/metatube-server-releases
           token: ${{ secrets.ORG_PAT }}
