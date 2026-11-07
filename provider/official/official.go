@@ -111,7 +111,7 @@ var seriesToDomain = map[string]string{
 	// ATTACKERS
 	"atvr": "attackers.net", "rbk": "attackers.net", "rbd": "attackers.net",
 	"same": "attackers.net", "shkd": "attackers.net", "atid": "attackers.net",
-	"adn": "attackers.net", "atkd": "attackers.net", "jbd": "attackers.net",
+	"adn": "attackers.net", "atkd": "attackers.net", "jbd": "attackers.net", //nolint:misspell // adn 是番号前缀，非 and 拼写
 	"sspd": "attackers.net", "atad": "attackers.net", "azsd": "attackers.net",
 	// えむっ娘ラボ
 	"mvr": "mko-labo.net", "mism": "mko-labo.net", "emlb": "mko-labo.net",

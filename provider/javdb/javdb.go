@@ -70,7 +70,7 @@ func (jav *JavDB) SetCookie(cookie string) {
 
 // collector returns a cloned collector with the configured cookie attached.
 func (jav *JavDB) collector() *colly.Collector {
-	c := jav.Scraper.ClonedCollector()
+	c := jav.ClonedCollector()
 	jav.mu.Lock()
 	cookie := jav.cookie
 	jav.mu.Unlock()

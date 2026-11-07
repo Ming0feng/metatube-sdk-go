@@ -60,15 +60,6 @@ var avOccupations = map[string]bool{
 	"Q488111":  true, // ポルノ俳優 / pornographic film actor
 }
 
-// providerIDMapping Pxxx → 关联 id 的键名。
-var providerIDMapping = map[string]string{
-	"P345":  "imdb",
-	"P4985": "tmdb",
-	"P2002": "twitter",
-	"P2003": "instagram",
-	"P9781": "fanza",
-}
-
 type Wikipedia struct {
 	*scraper.Scraper
 	fetcher *fetch.Fetcher
