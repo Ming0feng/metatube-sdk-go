@@ -31,13 +31,11 @@
 
 自有镜像由 GitHub Actions 在推送 tag 时自动构建，同时提供 `linux/amd64` 与 `linux/arm64`，拉取时自动匹配架构。
 
-> 该 package 目前为**私有**，拉取前需要登录：
+> 该 package 已设为 **public**，无需登录直接拉取：
 >
 > ```bash
-> echo "<你的 GitHub PAT>" | docker login ghcr.io -u Ming0feng --password-stdin
+> docker pull ghcr.io/ming0feng/metatube-server:latest
 > ```
->
-> PAT 需勾选 `read:packages`。若希望免登录拉取，可在 package 设置中把可见性改为 public。
 
 以下示例统一使用 `ghcr.io/ming0feng/metatube-server:latest`。
 
