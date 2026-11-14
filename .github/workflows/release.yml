@@ -41,7 +41,6 @@ jobs:
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          body: _Auto Released by Actions_
           generate_release_notes: true
           files: build/*
           draft: false
